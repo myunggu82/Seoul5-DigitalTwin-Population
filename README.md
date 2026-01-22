@@ -1,6 +1,6 @@
 
 
-# Seoul5 Digital Twin Population (Seoul5-ABSP)
+# Seoul5 Digital Twin Population (Seoul5-ABSP): Activity-Based Synthetic Population for Southwest Seoul
 Synthetic population dataset and code for Seoul 5-districts digital twin (2024)
 
 This repository contains the R code and synthetic population datasets

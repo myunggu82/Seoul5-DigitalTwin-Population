@@ -1,12 +1,12 @@
 # scripts/99_run_pipeline.R
 # Seoul5-ABSP: End-to-end reproducible pipeline (inputs -> process -> outputs -> validation)
-# Run: Rscript scripts/99_run_pipeline.R
+# Run: Rscript code/scripts/99_run_pipeline.R
 
-source(here("scripts", "00_config.R"))
-source(here("R", "checks.R"))
-source(here("R", "helpers.R"))
-source(here("R", "io.R"))
-source(here("R", "validation.R"))
+source(here("code", "scripts", "00_config.R"))
+source(here("code", "R", "checks.R"))
+source(here("code", "R", "helpers.R"))
+source(here("code", "R", "io.R"))
+source(here("code", "R", "validation.R"))
 
 # =========================================================
 # 1) Read + schema check
@@ -605,7 +605,7 @@ source("code/R/validation.R")
 
 val <- run_validations(
   timetable_panel   = timetable_panel,
-  time_slot_weights = time_slot_weights,
+  time_slot_weights <- time_slot_distributions,
   person_file       = person_file
 )
 
@@ -762,6 +762,8 @@ write_csv(hh_size_dist,             file.path(paths$out$data,   "household_size_
 write_csv(hh_type_dist,             file.path(paths$out$data,   "household_type_distribution.csv"))
 write_csv(hh_head_age_dist,         file.path(paths$out$data,   "head_age_distribution_by_generation.csv"))
 write_csv(hh_gen_multi_dist,        file.path(paths$out$data,   "generation_distribution_multi_person.csv"))
+write_csv(validation_overall, file.path(paths$out$tables, "validation_overall_panel_time.csv"))
+write_csv(spatial_valid,      file.path(paths$out$tables, "validation_spatial_dong_level.csv"))
 
 # QC tables
 write_csv(qc_time,      file.path(paths$out$tables, "qc_time_slot_sum_to_one.csv"))

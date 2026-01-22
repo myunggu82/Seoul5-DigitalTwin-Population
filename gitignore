@@ -1,1 +1,5 @@
+# Local processed inputs (NOT tracked)
+data/processed/
 
+# Pipeline outputs (NOT tracked)
+outputs/

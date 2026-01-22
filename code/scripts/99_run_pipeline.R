@@ -600,6 +600,22 @@ panel_with_purpose <- panel_with_time %>%
 
 timetable_panel <- panel_with_purpose
 
+# ---- Validation --------------------------------------------------------
+source("code/R/validation.R")
+
+val <- run_validations(
+  timetable_panel   = timetable_panel,
+  time_slot_weights = time_slot_weights,
+  person_file       = person_file
+)
+
+print(val$temporal_metrics)
+# Optional: preview
+print(head(val$qq_data))
+print(head(val$spatial_error))
+print(head(val$household_age_gaps))
+
+
 # =========================================================
 # 11) Validation (panel-level, distributional, spatial, household age gaps)
 # =========================================================

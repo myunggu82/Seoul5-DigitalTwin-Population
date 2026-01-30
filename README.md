@@ -4,7 +4,7 @@
 Synthetic population dataset and code for Seoul 5-districts digital twin (2024)
 
 This repository contains the R code and synthetic population datasets
-for constructing a digital twin population of approximately 3.7 million individuals
+for constructing a digital twin population of approximately 1.8 million individuals
 for five districts in Seoul, Republic of Korea
 (Geumcheon, Guro, Gwanak, Yeongdeungpo, Dongjak).
 

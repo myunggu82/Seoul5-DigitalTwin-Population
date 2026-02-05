@@ -23,7 +23,7 @@ Users should place the required processed input files under `data/processed/` on
 
 ##  Citation
 A DOI will be available after the Zenodo release.
-(https://zenodo.org/records/18334075)
+(https://zenodo.org/records/18334074)
 
 ##  License
 Code: MIT License

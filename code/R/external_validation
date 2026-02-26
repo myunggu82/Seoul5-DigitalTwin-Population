@@ -1,0 +1,288 @@
+#!/usr/bin/env Rscript
+
+# =========================================================
+# External validation: Subway alighting vs synthetic rhythm
+# =========================================================
+
+suppressPackageStartupMessages({
+  library(tidyverse)
+  library(lubridate)
+  library(readxl)
+  library(stringr)
+  library(scales)
+})
+
+# -----------------------------
+# 0) User settings (edit here)
+# -----------------------------
+# Option A (recommended for GitHub): relative paths within repo
+PATH_RDS   <- file.path("data", "synthetic_rds")     # contains .rds objects
+PATH_SUBWAY <- file.path("data", "external", "trans.xlsx")  # subway excel
+
+# target stations (keep only the ones you want to show)
+STATIONS_KEEP <- c("가산디지털단지", "여의도")
+
+# output directory
+DIR_OUT <- file.path("outputs", "external_validation")
+dir.create(DIR_OUT, recursive = TRUE, showWarnings = FALSE)
+
+# time-slot order (6 slots)
+SLOT_ORDER <- c("slot_00_06","slot_06_09","slot_09_12","slot_12_19","slot_19_21","slot_21_24")
+
+# labels for publication figure
+STATION_LABEL <- c(
+  "가산디지털단지" = "Gasan Digital Complex Station",
+  "여의도"       = "Yeouido Station"
+)
+SLOT_LABEL <- c(
+  "slot_00_06" = "00–06",
+  "slot_06_09" = "06–09",
+  "slot_09_12" = "09–12",
+  "slot_12_19" = "12–19",
+  "slot_19_21" = "19–21",
+  "slot_21_24" = "21–24"
+)
+
+# station -> gu mapping (edit if you change stations)
+STATION_GU_MAP <- tibble(
+  역명    = c("가산디지털단지", "여의도"),
+  gu_code = c("11530", "11560"),
+  gu_name = c("금천구", "영등포구")
+)
+
+# gu_code -> gu_name map (edit if needed)
+GU_CODE_MAP <- tibble(
+  gu_code = c("11530","11545","11560","11590","11620"),
+  gu_name = c("금천구","구로구","영등포구","동작구","관악구")
+)
+
+# ---------------------------------------------------------
+# 1) Helpers
+# ---------------------------------------------------------
+fail_if_missing <- function(path, msg) {
+  if (!file.exists(path)) stop(msg, call. = FALSE)
+}
+
+recode_slot <- function(x) {
+  recode(x,
+    "midnight_00_06"     = "slot_00_06",
+    "morning_06_09"      = "slot_06_09",
+    "midday_09_12"       = "slot_09_12",
+    "afternoon_12_19"    = "slot_12_19",
+    "evening_19_21"      = "slot_19_21",
+    "late_evening_21_24" = "slot_21_24",
+    .default = NA_character_
+  )
+}
+
+# load all rds into a named list (no assign() to global env)
+load_rds_list <- function(dir_rds) {
+  fail_if_missing(dir_rds, paste0("RDS directory not found: ", dir_rds,
+                                 "\nPlease place required .rds files under this folder."))
+
+  files <- list.files(dir_rds, pattern = "\\.rds$", full.names = TRUE)
+  if (length(files) == 0) stop("No .rds files found in: ", dir_rds, call. = FALSE)
+
+  obj <- purrr::map(files, readRDS)
+  names(obj) <- tools::file_path_sans_ext(basename(files))
+  obj
+}
+
+# ---------------------------------------------------------
+# 2) Load data
+# ---------------------------------------------------------
+# subway file existence check
+fail_if_missing(PATH_SUBWAY,
+  paste0("Subway file not found: ", PATH_SUBWAY,
+         "\nExpected: data/external/trans.xlsx (default). Update PATH_SUBWAY if needed."))
+
+rds <- load_rds_list(PATH_RDS)
+
+# required objects (names must match your .rds filenames)
+required <- c("timetable_panel_2024_06_seoul5_v1", "time_slot_weights_2024_06_seoul5_v1")
+missing <- setdiff(required, names(rds))
+if (length(missing) > 0) {
+  stop("Missing required RDS object(s): ", paste(missing, collapse = ", "),
+       "\nPlease ensure these .rds files exist under: ", PATH_RDS, call. = FALSE)
+}
+
+tp <- rds[["timetable_panel_2024_06_seoul5_v1"]]
+w  <- rds[["time_slot_weights_2024_06_seoul5_v1"]]
+
+# ---------------------------------------------------------
+# 3) Subway: weekday + alighting -> station mean -> 6-slot share
+# ---------------------------------------------------------
+sub_raw <- readxl::read_excel(PATH_SUBWAY)
+
+sub <- sub_raw %>%
+  mutate(
+    수송일자 = as.Date(수송일자),
+    weekday_num = lubridate::wday(수송일자, week_start = 1) # Mon=1 ... Sun=7
+  ) %>%
+  filter(
+    weekday_num <= 5,
+    승하차구분 == "하차",
+    역명 %in% STATIONS_KEEP
+  )
+
+time_cols <- names(sub)[str_detect(names(sub), "시이전|시이후|시간대")]
+if (length(time_cols) == 0) {
+  stop("No hourly columns detected in subway file. Check column names.", call. = FALSE)
+}
+
+sub_station <- sub %>%
+  group_by(역명) %>%
+  summarise(across(all_of(time_cols), mean, na.rm = TRUE), .groups = "drop")
+
+sub_slot <- sub_station %>%
+  mutate(
+    slot_00_06 = `06시이전` + `24시이후`,
+    slot_06_09 = `06-07시간대` + `07-08시간대` + `08-09시간대`,
+    slot_09_12 = `09-10시간대` + `10-11시간대` + `11-12시간대`,
+    slot_12_19 = rowSums(select(., `12-13시간대`:`18-19시간대`), na.rm = TRUE),
+    slot_19_21 = `19-20시간대` + `20-21시간대`,
+    slot_21_24 = `21-22시간대` + `22-23시간대` + `23-24시간대`
+  ) %>%
+  select(역명, all_of(SLOT_ORDER)) %>%
+  rowwise() %>%
+  mutate(total = sum(c_across(all_of(SLOT_ORDER)), na.rm = TRUE)) %>%
+  mutate(across(all_of(SLOT_ORDER), ~ .x / total)) %>%
+  ungroup() %>%
+  select(-total)
+
+# ---------------------------------------------------------
+# 4) Synthetic: mobility-weighted work/school rhythm (GU-level)
+# ---------------------------------------------------------
+tp_slot <- tp %>%
+  mutate(
+    gu_code = substr(as.character(dong_code), 1, 5),
+    slot = recode_slot(time_slot)
+  )
+
+# work/school share by GU×slot
+share_gu <- tp_slot %>%
+  filter(day_type == "weekday", !is.na(slot)) %>%
+  group_by(gu_code, slot) %>%
+  summarise(
+    p_workschool = mean(purpose_cat %in% c("work","school")),
+    .groups = "drop"
+  )
+
+# time-slot weights: restrict to working-age (15–64) & weekday
+w2 <- w %>%
+  mutate(
+    age_start = as.numeric(str_extract(age_lp_band, "^[0-9]+")),
+    gu_code   = substr(as.character(dong_code), 1, 5)
+  ) %>%
+  filter(!is.na(age_start), age_start >= 15, age_start <= 64) %>%
+  left_join(GU_CODE_MAP, by = "gu_code")
+
+calc_syn_by_gu <- function(target_gu_code, target_gu_name) {
+
+  syn_ptime <- w2 %>%
+    filter(gu_name == target_gu_name, day_type == "weekday") %>%
+    group_by(time_slot) %>%
+    summarise(p_time = mean(p_time, na.rm = TRUE), .groups="drop") %>%
+    mutate(slot = recode_slot(time_slot)) %>%
+    filter(!is.na(slot)) %>%
+    select(slot, p_time) %>%
+    arrange(match(slot, SLOT_ORDER))
+
+  syn_final <- syn_ptime %>%
+    left_join(share_gu %>% filter(gu_code == target_gu_code), by="slot") %>%
+    mutate(
+      mob_flow = p_time * p_workschool,
+      share = mob_flow / sum(mob_flow)
+    ) %>%
+    arrange(match(slot, SLOT_ORDER)) %>%
+    select(slot, share)
+
+  syn_final
+}
+
+syn_by_station <- STATION_GU_MAP %>%
+  mutate(syn_data = pmap(list(gu_code, gu_name), calc_syn_by_gu)) %>%
+  select(역명, syn_data) %>%
+  unnest(syn_data)
+
+# ---------------------------------------------------------
+# 5) Metrics: station-level r / MAE / RMSE
+# ---------------------------------------------------------
+sub_wide <- sub_slot %>% select(역명, all_of(SLOT_ORDER))
+syn_wide <- syn_by_station %>% pivot_wider(names_from = slot, values_from = share)
+
+results_by_station <- sub_wide %>%
+  left_join(syn_wide, by="역명", suffix=c("_sub","_syn")) %>%
+  rowwise() %>%
+  mutate(
+    pearson_r = cor(
+      as.numeric(c_across(paste0(SLOT_ORDER, "_sub"))),
+      as.numeric(c_across(paste0(SLOT_ORDER, "_syn"))),
+      use="complete.obs"
+    ),
+    MAE = mean(abs(
+      as.numeric(c_across(paste0(SLOT_ORDER, "_sub"))) -
+        as.numeric(c_across(paste0(SLOT_ORDER, "_syn")))
+    )),
+    RMSE = sqrt(mean((
+      as.numeric(c_across(paste0(SLOT_ORDER, "_sub"))) -
+        as.numeric(c_across(paste0(SLOT_ORDER, "_syn")))
+    )^2))
+  ) %>%
+  ungroup() %>%
+  select(역명, pearson_r, MAE, RMSE) %>%
+  arrange(desc(pearson_r))
+
+readr::write_csv(results_by_station, file.path(DIR_OUT, "table_subway_validation_metrics.csv"))
+
+# ---------------------------------------------------------
+# 6) Publication-ready plot
+# ---------------------------------------------------------
+plot_df <- sub_slot %>%
+  pivot_longer(cols = all_of(SLOT_ORDER), names_to="slot", values_to="Subway") %>%
+  left_join(syn_by_station, by=c("역명","slot")) %>%
+  transmute(역명, slot, Subway = Subway, Synthetic = share) %>%
+  mutate(
+    slot = factor(slot, levels = SLOT_ORDER),
+    역명 = factor(역명, levels = STATIONS_KEEP)
+  ) %>%
+  pivot_longer(cols = c(Subway, Synthetic), names_to="Source", values_to="Proportion") %>%
+  mutate(
+    Station = recode(as.character(역명), !!!STATION_LABEL),
+    TimeSlot = factor(as.character(slot), levels = SLOT_ORDER, labels = SLOT_LABEL[SLOT_ORDER]),
+    Source = factor(Source, levels = c("Subway","Synthetic"),
+                    labels = c("Subway (observed alighting)", "Synthetic (mobility-weighted)"))
+  )
+
+p <- ggplot(plot_df, aes(x = TimeSlot, y = Proportion, color = Source, group = Source)) +
+  geom_line(linewidth = 1.0) +
+  geom_point(size = 2.2) +
+  facet_wrap(~Station, nrow = 1) +
+  scale_y_continuous(labels = percent_format(accuracy = 1),
+                     limits = c(0, NA),
+                     expand = expansion(mult = c(0, 0.05))) +
+  labs(
+    title = "Weekday temporal rhythm: subway alighting vs synthetic mobility-weighted activity",
+    x = "Time of day (hours)",
+    y = "Share of daily volume",
+    color = NULL
+  ) +
+  theme_classic(base_size = 12) +
+  theme(
+    plot.title = element_text(face = "bold", hjust = 0),
+    axis.title = element_text(face = "bold"),
+    strip.text = element_text(face = "bold"),
+    legend.position = "top",
+    legend.justification = "left",
+    legend.text = element_text(size = 10),
+    panel.spacing = unit(1.2, "lines")
+  )
+
+ggsave(file.path(DIR_OUT, "fig_subway_validation_gasan_yeouido.png"),
+       p, width = 7.5, height = 3.4, dpi = 400)
+ggsave(file.path(DIR_OUT, "fig_subway_validation_gasan_yeouido.pdf"),
+       p, width = 7.5, height = 3.4, device = cairo_pdf)
+
+message("Done. Outputs saved to: ", DIR_OUT)
+message(" - table_subway_validation_metrics.csv")
+message(" - fig_subway_validation_gasan_yeouido.png / .pdf")

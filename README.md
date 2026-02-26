@@ -17,9 +17,9 @@ for five districts in Seoul, Republic of Korea
 
 This repository provides a fully reproducible pipeline for generating the Seoul5 digital twin population.
 
-Due to data size and redistribution constraints, the processed input datasets are not included in this repository.
-Users should place the required processed input files under `data/processed/` on their local machine
-(see `data/README_data.md` for detailed input specifications).
+Due to data size and redistribution constraints, the processed input datasets are not included in this repository. Users should place the required processed input files under `data/processed/` on their local machine (see `data/README_data.md` for detailed input specifications).
+
+Full synthetic population objects (e.g., large RDS files) and external subway smart-card data used for validation are not publicly available due to size and licensing restrictions. However, the complete R-based synthesis and validation pipeline is fully provided to enable transparent replication when compatible datasets are available.
 
 ##  Citation
 A DOI will be available after the Zenodo release.

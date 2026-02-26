@@ -19,7 +19,7 @@ This repository provides a fully reproducible pipeline for generating the Seoul5
 
 Due to data size and redistribution constraints, the processed input datasets are not included in this repository. Users should place the required processed input files under `data/processed/` on their local machine (see `data/README_data.md` for detailed input specifications).
 
-Full synthetic population objects (e.g., large RDS files) and external subway smart-card data used for validation are not publicly available due to size and licensing restrictions. However, the complete R-based synthesis and validation pipeline is fully provided to enable transparent replication when compatible datasets are available.
+The full synthetic population objects and external validation datasets (subway smart-card records) are not distributed through this repository due to size constraints and third-party data licensing restrictions. The complete R-based synthesis and validation pipeline is publicly provided to ensure methodological transparency and to facilitate independent replication when equivalent datasets are available.
 
 ##  Citation
 A DOI will be available after the Zenodo release.
